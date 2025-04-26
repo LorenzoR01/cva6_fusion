@@ -97,6 +97,7 @@ sources:
       - core/csr_buffer.sv
       - core/csr_regfile.sv
       - core/decoder.sv
+      - core/fusion_scan.sv
       - core/ex_stage.sv
       - core/acc_dispatcher.sv
       - core/instr_realign.sv

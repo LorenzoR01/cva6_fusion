@@ -185,8 +185,19 @@ module load_store_unit
   logic                        overflow;
   logic                        g_overflow;
   logic [(CVA6Cfg.XLEN/8)-1:0] be_i;
+  logic [    CVA6Cfg.XLEN-1:0] fu_data_i_opb;
 
-  assign vaddr_xlen = $unsigned($signed(fu_data_i.imm) + $signed(fu_data_i.operand_a));
+  // LOAD or ADD+LOAD fusion check
+  always_comb begin
+    if ((fu_data_i.fu == LOAD) && (fu_data_i.is_fusion != 2'b00)) begin : gen_address_fusion
+      fu_data_i_opb = fu_data_i.operand_b;
+    end else begin : gen_address_standard
+      fu_data_i_opb = '0;
+    end
+  end
+
+  assign vaddr_xlen = $unsigned($signed(fu_data_i.imm) + $signed(fu_data_i.operand_a) + $signed(fu_data_i_opb)); 
+
   assign vaddr_i = vaddr_xlen[CVA6Cfg.VLEN-1:0];
   // we work with SV39 or SV32, so if VM is enabled, check that all bits [XLEN-1:38] or [XLEN-1:31] are equal
   assign overflow = (CVA6Cfg.IS_XLEN64 && (!((&vaddr_xlen[CVA6Cfg.XLEN-1:CVA6Cfg.SV-1]) == 1'b1 || (|vaddr_xlen[CVA6Cfg.XLEN-1:CVA6Cfg.SV-1]) == 1'b0)));

@@ -109,6 +109,8 @@ module id_stage #(
 
   logic              [CVA6Cfg.NrIssuePorts-1:0]       is_control_flow_instr;
   scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0]       decoded_instruction;
+  scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0]       dec_instruction;
+  logic                                               first_instruction_valid;
   logic              [CVA6Cfg.NrIssuePorts-1:0]       decoded_instruction_valid;
   logic              [CVA6Cfg.NrIssuePorts-1:0][31:0] orig_instr;
 
@@ -337,10 +339,31 @@ module id_stage #(
         .vtw_i,
         .tsr_i,
         .hu_i,
-        .instruction_o             (decoded_instruction[i]),
+        .instruction_o             (dec_instruction[i]),
         .orig_instr_o              (orig_instr[i]),
         .is_control_flow_instr_o   (is_control_flow_instr[i])
     );
+  end
+
+if (CVA6Cfg.NrIssuePorts == 2 && CVA6Cfg.FusionEn) begin
+    fusion_scan #(
+        .CVA6Cfg(CVA6Cfg),
+        .branchpredict_sbe_t(branchpredict_sbe_t),
+        .exception_t(exception_t),
+        .scoreboard_entry_t(scoreboard_entry_t)
+    ) fusion_scan_i (
+        .clk_i (clk_i),
+        .rst_ni (rst_ni),
+        .instruction_i (dec_instruction),
+        .fetch_entry_ready_i (fetch_entry_ready_o),
+        .instruction_o (decoded_instruction),
+        .first_instruction_valid_o (first_instruction_valid)
+        );
+  end else begin
+    for (genvar i = 0; i < CVA6Cfg.NrIssuePorts; i++) begin
+      assign decoded_instruction[i] = dec_instruction[i];
+    end
+    assign first_instruction_valid = 1'b1;
   end
 
   // ------------------
@@ -359,8 +382,8 @@ module id_stage #(
       issue_n = issue_q;
       fetch_entry_ready_o = '0;
       // instruction is not valid if we stall due to ZCMT or CVXIF
-      decoded_instruction_valid[0] = (CVA6Cfg.RVZCMT && is_zcmt_instr[0] && stall_macro_deco_zcmt) ||
-                                     (CVA6Cfg.CvxifEn && is_illegal_cvxif_i && ~stall_macro_deco) && stall_instr_fetch[0]
+      decoded_instruction_valid[0] = ((CVA6Cfg.RVZCMT && is_zcmt_instr[0] && stall_macro_deco_zcmt) ||
+                                     (CVA6Cfg.CvxifEn && is_illegal_cvxif_i && ~stall_macro_deco) && stall_instr_fetch[0]) || ~first_instruction_valid
                                      ? 1'b0 : 1'b1;
       // Instruction on port 1 are always valid. It is either 32bits or legal 16bits.
       decoded_instruction_valid[1] = ~stall_instr_fetch[1];
