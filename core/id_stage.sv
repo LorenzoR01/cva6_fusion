@@ -110,7 +110,7 @@ module id_stage #(
   logic              [CVA6Cfg.NrIssuePorts-1:0]       is_control_flow_instr;
   scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0]       decoded_instruction;
   scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0]       dec_instruction;
-  logic                                               first_instruction_valid;
+  logic                                               fusion_second_instr_valid;
   logic              [CVA6Cfg.NrIssuePorts-1:0]       decoded_instruction_valid;
   logic              [CVA6Cfg.NrIssuePorts-1:0][31:0] orig_instr;
 
@@ -352,18 +352,16 @@ if (CVA6Cfg.NrIssuePorts == 2 && CVA6Cfg.FusionEn) begin
         .exception_t(exception_t),
         .scoreboard_entry_t(scoreboard_entry_t)
     ) fusion_scan_i (
-        .clk_i (clk_i),
-        .rst_ni (rst_ni),
         .instruction_i (dec_instruction),
-        .fetch_entry_ready_i (fetch_entry_ready_o),
+        .fetch_entry_valid_i (fetch_entry_valid_i),
         .instruction_o (decoded_instruction),
-        .first_instruction_valid_o (first_instruction_valid)
+        .fusion_second_instr_valid_o (fusion_second_instr_valid)
         );
   end else begin
     for (genvar i = 0; i < CVA6Cfg.NrIssuePorts; i++) begin
       assign decoded_instruction[i] = dec_instruction[i];
     end
-    assign first_instruction_valid = 1'b1;
+    assign fusion_second_instr_valid = 1'b1;
   end
 
   // ------------------
@@ -383,10 +381,10 @@ if (CVA6Cfg.NrIssuePorts == 2 && CVA6Cfg.FusionEn) begin
       fetch_entry_ready_o = '0;
       // instruction is not valid if we stall due to ZCMT or CVXIF
       decoded_instruction_valid[0] = ((CVA6Cfg.RVZCMT && is_zcmt_instr[0] && stall_macro_deco_zcmt) ||
-                                     (CVA6Cfg.CvxifEn && is_illegal_cvxif_i && ~stall_macro_deco) && stall_instr_fetch[0]) || ~first_instruction_valid
+                                     (CVA6Cfg.CvxifEn && is_illegal_cvxif_i && ~stall_macro_deco) && stall_instr_fetch[0])
                                      ? 1'b0 : 1'b1;
       // Instruction on port 1 are always valid. It is either 32bits or legal 16bits.
-      decoded_instruction_valid[1] = ~stall_instr_fetch[1];
+      decoded_instruction_valid[1] = ~stall_instr_fetch[1] && fusion_second_instr_valid;
 
       // Clear the valid flag if issue has acknowledged the instruction
       if (issue_instr_ack_i[0]) begin
@@ -431,6 +429,10 @@ if (CVA6Cfg.NrIssuePorts == 2 && CVA6Cfg.FusionEn) begin
               is_control_flow_instr[0]
           };
         end
+      end
+
+      if (fetch_entry_ready_o == 2'b01 && fusion_second_instr_valid == 1'b0) begin
+        fetch_entry_ready_o = 2'b11;
       end
 
       if (flush_i) begin
