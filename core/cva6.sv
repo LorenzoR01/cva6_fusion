@@ -410,9 +410,9 @@ module cva6
   // --------------
   // IF <-> ID
   // --------------
-  fetch_entry_t [CVA6Cfg.NrIssuePorts-1:0] fetch_entry_if_id;
-  logic [CVA6Cfg.NrIssuePorts-1:0] fetch_valid_if_id;
-  logic [CVA6Cfg.NrIssuePorts-1:0] fetch_ready_id_if;
+  fetch_entry_t [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0] fetch_entry_if_id;
+  logic [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0] fetch_valid_if_id;
+  logic [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0] fetch_ready_id_if;
 
   // --------------
   // ID <-> ISSUE
@@ -1228,6 +1228,9 @@ module cva6
         .data_o        (data_perf_csr),
         .commit_instr_i(commit_instr_id_commit),
         .commit_ack_i  (commit_ack),
+        .issue_instr_ack_i  (issue_instr_issue_id),
+        .issue_entry_valid_i(issue_entry_valid_id_issue),
+
 
         .l1_icache_miss_i   (icache_miss_cache_perf),
         .l1_dcache_miss_i   (dcache_miss_cache_perf),
@@ -1685,8 +1688,8 @@ module cva6
       .flush_unissued(flush_unissued_instr_ctrl_id),
       .flush_all(flush_ctrl_ex),
       .instruction(fetch_instructions),
-      .fetch_valid(id_stage_i.fetch_entry_valid_i),
-      .fetch_ack(id_stage_i.fetch_entry_ready_o),
+      .fetch_valid(id_stage_i.fetch_entry_valid_i[CVA6Cfg.NrIssuePorts-1:0]),
+      .fetch_ack(id_stage_i.fetch_entry_ready_o[CVA6Cfg.NrIssuePorts-1:0]),
       .issue_ack(issue_stage_i.i_scoreboard.issue_ack_i),
       .issue_sbe(issue_stage_i.i_scoreboard.issue_instr_o),
       .waddr(waddr_commit_id),
@@ -1783,7 +1786,7 @@ module cva6
 
       .flush_i            (flush_ctrl_if),
       .issue_instr_ack_i  (issue_instr_issue_id),
-      .fetch_entry_valid_i(fetch_valid_if_id),
+      .fetch_entry_valid_i(fetch_valid_if_id[CVA6Cfg.NrIssuePorts-1:0]),
       .instruction_i      (rvfi_fetch_instr),
       .is_compressed_i    (rvfi_is_compressed),
 

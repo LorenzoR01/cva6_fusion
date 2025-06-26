@@ -566,11 +566,11 @@ def write_trace(output_file, instructions):
     with open(output_file, 'w') as f:
         f.writelines(lines)
 
-def print_data(name, value, ts=24, sep='='):
+def print_data(name, value, filename=None, ts=24, sep='='):
     "Prints 'name = data' with alignment of the '='"
 
     spaces = ' ' * (ts - len(name))
-    print(f"{name}{spaces} {sep} {value}")
+    print(f"{name}{spaces} {sep} {value}", file=filename)
 
 def display_scores(scores):
     """Display a 3D graph of scores against commit/issue-wide"""
@@ -621,10 +621,11 @@ def issue_commit_graph(input_file, n = 3):
 def filter_timed_part(all_instructions):
     "Keep only timed part from a trace"
     filtered = []
-    re_csrr_minstret = re.compile(r"^csrr\s+\w\w,\s*minstret$")
+    # re_csrr_minstret = re.compile(r"^csrr\s+\w\w,\s*minstret$")
     accepting = False
     for instr in all_instructions:
-        if re_csrr_minstret.search(instr.mnemo):
+        # if re_csrr_minstret.search(instr.mnemo):
+        if "32951073" in instr.hex_code:
             accepting = not accepting
             continue
         if accepting:
@@ -636,7 +637,7 @@ def count_cycles(retired):
     end = max(e.cycle for e in retired[-1].events)
     return end - start
 
-def print_stats(instructions):
+def print_stats(instructions, input_file):
     ecount = defaultdict(lambda: 0)
 
     for instr in instructions:
@@ -645,22 +646,23 @@ def print_stats(instructions):
             cycle = e.cycle
     n_instr = len(instructions)
     n_cycles = count_cycles(instructions)
-
-    print_data("cycle number", n_cycles)
-    print_data("Coremark/MHz", 1000000 / n_cycles)
-    print_data("instruction number", n_instr)
-    for ek, count in ecount.items():
-        print_data(f"{ek}/instr", f"{100 * count / n_instr:.2f}%")
+    with open('out.txt', 'a') as f:
+        print(f"\n\n{input_file}    PERFORMANCE MODEL", file=f)
+        print_data("cycle number", n_cycles, f)
+        print_data("Coremark/MHz", 1000000 / n_cycles, f)
+        print_data("instruction number", n_instr, f)
+        for ek, count in ecount.items():
+            print_data(f"{ek}/instr", f"{100 * count / n_instr:.2f}%", f)
 
 def main(input_file: str):
     "Entry point"
 
-    model = Model(debug=True, issue=2, commit=2)
+    model = Model(debug=False, issue=2, commit=2)
     model.load_file(input_file)
     model.run()
 
-    write_trace('annotated.log', model.retired)
-    print_stats(filter_timed_part(model.retired))
+    write_trace('annotated_'+input_file, model.retired)
+    print_stats(filter_timed_part(model.retired), input_file)
 
 if __name__ == "__main__":
     main(sys.argv[1])

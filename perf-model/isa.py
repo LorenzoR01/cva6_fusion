@@ -428,7 +428,9 @@ class Instr:
         ['BRANCH', 'JALR', 'reserved', 'JAL', 'SYSTEM', 'reserved', 'custom-3/rv128', '80b'],
     ]
     type_of_base = {
+        'MISC-MEM': Itype,
         'OP-IMM': Itype,
+        'OP-IMM-32': Itype,
         'LUI': Utype,
         'AUIPC': Utype,
         'OP': Rtype,
@@ -489,10 +491,19 @@ class Instr:
         if self.is_compressed():
             line = self.bin & 3
             col = (self.bin >> 13) & 7
+            #if line == 2 and col == 4:
+            #    if ((self.bin >> 2) & 31) == 0:
+            #       col = 8 #C.ADD/C.MV
             result = Instr.table_16_4_RV32[line][col]
         else:
             line = (self.bin >> 5) & 3
             col = (self.bin >> 2) & 7
+            #if line == 1 and col == 4:
+            #    if ((self.bin >> 12) & 7) == 0:
+            #       col = 8 # ADD
+            #if line == 0 and col == 4:
+            #    if ((self.bin >> 12) & 7) == 0:
+            #       col = 8 # ADDI
             result = Instr.table_24_1[line][col]
         return result
 

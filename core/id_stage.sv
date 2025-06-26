@@ -37,11 +37,11 @@ module id_stage #(
     // Debug (async) request - SUBSYSTEM
     input logic debug_req_i,
     // Handshake's data between fetch and decode - FRONTEND
-    input fetch_entry_t [CVA6Cfg.NrIssuePorts-1:0] fetch_entry_i,
+    input fetch_entry_t [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0] fetch_entry_i,
     // Handshake's valid between fetch and decode - FRONTEND
-    input logic [CVA6Cfg.NrIssuePorts-1:0] fetch_entry_valid_i,
+    input logic [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0] fetch_entry_valid_i,
     // Handshake's ready between fetch and decode - FRONTEND
-    output logic [CVA6Cfg.NrIssuePorts-1:0] fetch_entry_ready_o,
+    output logic [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0] fetch_entry_ready_o,
     // Handshake's data between decode and issue - ISSUE
     output scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0] issue_entry_o,
     output scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0] issue_entry_o_prev,
@@ -105,21 +105,21 @@ module id_stage #(
   } issue_struct_t;
   issue_struct_t [CVA6Cfg.NrIssuePorts-1:0] issue_n, issue_q;
   // stall required for ZCMP ZCMT CVXIF
-  logic              [CVA6Cfg.NrIssuePorts-1:0]       stall_instr_fetch;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0]       stall_instr_fetch;
 
-  logic              [CVA6Cfg.NrIssuePorts-1:0]       is_control_flow_instr;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0]       is_control_flow_instr;
   scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0]       decoded_instruction;
-  scoreboard_entry_t [CVA6Cfg.NrIssuePorts-1:0]       dec_instruction;
+  scoreboard_entry_t [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0]       dec_instruction;
   logic                                               fusion_second_instr_valid;
-  logic              [CVA6Cfg.NrIssuePorts-1:0]       decoded_instruction_valid;
-  logic              [CVA6Cfg.NrIssuePorts-1:0][31:0] orig_instr;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0]       decoded_instruction_valid;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0][31:0] orig_instr;
 
   // Compressed decoder signals
-  logic              [CVA6Cfg.NrIssuePorts-1:0]       is_illegal_rvc;
-  logic              [CVA6Cfg.NrIssuePorts-1:0][31:0] instruction_rvc;
-  logic              [CVA6Cfg.NrIssuePorts-1:0]       is_compressed_rvc;
-  logic              [CVA6Cfg.NrIssuePorts-1:0]       is_zcmt_instr;
-  logic              [CVA6Cfg.NrIssuePorts-1:0]       is_macro_instr;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0]       is_illegal_rvc;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0][31:0] instruction_rvc;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0]       is_compressed_rvc;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0]       is_zcmt_instr;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0]       is_macro_instr;
 
   // CVXIF compressed interface driver signals
   // Inputs
@@ -148,16 +148,16 @@ module id_stage #(
   logic              [        CVA6Cfg.XLEN-1:0]       jump_address;
 
   // Decoder signals
-  logic              [CVA6Cfg.NrIssuePorts-1:0]       is_illegal_deco;
-  logic              [CVA6Cfg.NrIssuePorts-1:0][31:0] instruction_deco;
-  logic              [CVA6Cfg.NrIssuePorts-1:0]       is_compressed_deco;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0]       is_illegal_deco;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0][31:0] instruction_deco;
+  logic              [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0]       is_compressed_deco;
 
 
   if (CVA6Cfg.RVC) begin
     // ---------------------------------------------------------
     // 1. Check if they are compressed and expand in case they are
     // ---------------------------------------------------------
-    for (genvar i = 0; i < CVA6Cfg.NrIssuePorts; i++) begin
+    for (genvar i = 0; i < CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn; i++) begin
       compressed_decoder #(
           .CVA6Cfg(CVA6Cfg)
       ) compressed_decoder_i (
@@ -172,6 +172,9 @@ module id_stage #(
 
     if (CVA6Cfg.SuperscalarEn) begin
       assign stall_instr_fetch[1] = is_illegal_rvc[1] || is_macro_instr[1] || is_zcmt_instr[1];
+      if (CVA6Cfg.FusionEn) begin
+        assign stall_instr_fetch [2] = stall_instr_fetch[1];
+      end
     end
 
     if (CVA6Cfg.RVZCMP) begin
@@ -302,7 +305,7 @@ module id_stage #(
 
   assign rvfi_is_compressed_o = is_compressed_rvc;
 
-  for (genvar i = 0; i < CVA6Cfg.NrIssuePorts; i++) begin
+  for (genvar i = 0; i < CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn; i++) begin
     decoder #(
         .CVA6Cfg(CVA6Cfg),
         .branchpredict_sbe_t(branchpredict_sbe_t),
@@ -355,7 +358,7 @@ if (CVA6Cfg.NrIssuePorts == 2 && CVA6Cfg.FusionEn) begin
         .instruction_i (dec_instruction),
         .fetch_entry_valid_i (fetch_entry_valid_i),
         .instruction_o (decoded_instruction),
-        .fusion_second_instr_valid_o (fusion_second_instr_valid)
+        .second_port_inst_valid_o  (fusion_second_instr_valid)
         );
   end else begin
     for (genvar i = 0; i < CVA6Cfg.NrIssuePorts; i++) begin
@@ -431,8 +434,21 @@ if (CVA6Cfg.NrIssuePorts == 2 && CVA6Cfg.FusionEn) begin
         end
       end
 
-      if (fetch_entry_ready_o == 2'b01 && fusion_second_instr_valid == 1'b0) begin
-        fetch_entry_ready_o = 2'b11;
+      if (decoded_instruction[0].is_fusion != 2'b00) begin
+        if (fusion_second_instr_valid == 1'b0) begin
+          if (fetch_entry_ready_o == 3'b001) begin
+            fetch_entry_ready_o = 3'b011;
+          end
+        end else if (fetch_entry_ready_o == 3'b001) begin
+            fetch_entry_ready_o = 3'b011;
+          end else if (fetch_entry_ready_o == 3'b011) begin
+              fetch_entry_ready_o = 3'b111;
+            end
+      end
+      if (decoded_instruction[1].is_fusion != 2'b00) begin
+        if (fetch_entry_ready_o == 3'b011) begin
+            fetch_entry_ready_o = 3'b111;
+          end
       end
 
       if (flush_i) begin

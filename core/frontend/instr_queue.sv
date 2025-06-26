@@ -81,11 +81,11 @@ module instr_queue
     // Address at which to replay the fetch - FRONTEND
     output logic [CVA6Cfg.VLEN-1:0] replay_addr_o,
     // Handshake’s data with ID_STAGE - ID_STAGE
-    output fetch_entry_t [CVA6Cfg.NrIssuePorts-1:0] fetch_entry_o,
+    output fetch_entry_t [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0] fetch_entry_o,
     // Handshake’s valid with ID_STAGE - ID_STAGE
-    output logic [CVA6Cfg.NrIssuePorts-1:0] fetch_entry_valid_o,
+    output logic [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0] fetch_entry_valid_o,
     // Handshake’s ready with ID_STAGE - ID_STAGE
-    input logic [CVA6Cfg.NrIssuePorts-1:0] fetch_entry_ready_i
+    input logic [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0] fetch_entry_ready_i
 );
 
   // Calculate next index based on whether superscalar is enabled or not.
@@ -122,13 +122,13 @@ module instr_queue
   // output FIFO select, one-hot
   logic [CVA6Cfg.INSTR_PER_FETCH-1:0] idx_ds_d, idx_ds_q;
   // rotated by N
-  logic [CVA6Cfg.NrIssuePorts:0][CVA6Cfg.INSTR_PER_FETCH-1:0] idx_ds;
+  logic [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn:0][CVA6Cfg.INSTR_PER_FETCH-1:0] idx_ds;
 
   logic [CVA6Cfg.VLEN-1:0] pc_d, pc_q;  // current PC
-  logic [CVA6Cfg.NrIssuePorts:0][CVA6Cfg.VLEN-1:0] pc_j;
+  logic [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn:0][CVA6Cfg.VLEN-1:0] pc_j;
   logic reset_address_d, reset_address_q;  // we need to re-set the address because of a flush
 
-  logic [CVA6Cfg.NrIssuePorts-1:0] fetch_entry_is_cf, fetch_entry_fire;
+  logic [CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn-1:0] fetch_entry_is_cf, fetch_entry_fire;
 
   logic [CVA6Cfg.INSTR_PER_FETCH*2-2:0] branch_mask_extended;
   logic [CVA6Cfg.INSTR_PER_FETCH-1:0] branch_mask;
@@ -171,7 +171,9 @@ module instr_queue
     // leading zero count = 1
     // 0 0 0 1, 1 1 1 << 1 = 0 0 1 1, 1 1 0
     // take the upper 4 bits: 0 0 1 1
+    // branch_mask_extended = 0 0 0 1 1 1 1 << 1 = 0 0 1 1 1 1 0
     assign branch_mask_extended = {{{CVA6Cfg.INSTR_PER_FETCH-1}{1'b0}}, {{CVA6Cfg.INSTR_PER_FETCH}{1'b1}}} << branch_index;
+    // branch_mask = branch_mask_extended[6:3] = 0 0 1 1
     assign branch_mask = branch_mask_extended[CVA6Cfg.INSTR_PER_FETCH * 2 - 2:CVA6Cfg.INSTR_PER_FETCH - 1];
 
     // mask with taken branches to get the actual amount of instructions we want to push
@@ -300,11 +302,15 @@ module instr_queue
   assign fetch_entry_valid_o[0] = ~(&instr_queue_empty);
   if (CVA6Cfg.SuperscalarEn) begin : gen_fetch_entry_valid_1
     // TODO Maybe this additional fetch_entry_is_cf check is useless as issue-stage already performs it?
-    assign fetch_entry_valid_o[NID] = ~|(instr_queue_empty & idx_ds[1]) & ~(&fetch_entry_is_cf);
+    // No other CF instruction can be valid if we have a CF instruction on port 0
+    assign fetch_entry_valid_o[NID] = ~|(instr_queue_empty & idx_ds[1]) & ~(fetch_entry_is_cf[0] & fetch_entry_is_cf[1]);
+    if (CVA6Cfg.FusionEn) begin : gen_fetch_entry_valid_2
+      assign fetch_entry_valid_o[NID+1] = ~|(instr_queue_empty & idx_ds[2]) & ~(fetch_entry_is_cf[0] & fetch_entry_is_cf[2]);
+    end
   end
 
   assign idx_ds[0] = idx_ds_q;
-  for (genvar i = 0; i < CVA6Cfg.NrIssuePorts; i++) begin
+  for (genvar i = 0; i < CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn; i++) begin
     if (CVA6Cfg.INSTR_PER_FETCH > 1) begin
       assign idx_ds[i+1] = {
         idx_ds[i][CVA6Cfg.INSTR_PER_FETCH-2:0], idx_ds[i][CVA6Cfg.INSTR_PER_FETCH-1]
@@ -320,7 +326,7 @@ module instr_queue
 
       pop_instr = '0;
       // assemble fetch entry
-      for (int unsigned i = 0; i < CVA6Cfg.NrIssuePorts; i++) begin
+      for (int unsigned i = 0; i < CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn; i++) begin
         fetch_entry_o[i].instruction = '0;
         fetch_entry_o[i].address = pc_j[i];
         fetch_entry_o[i].ex.valid = 1'b0;
@@ -374,12 +380,30 @@ module instr_queue
             // Cannot output two CF the same cycle.
             pop_instr[i] = fetch_entry_fire[NID];
           end
+          if (CVA6Cfg.FusionEn) begin
+            if (idx_ds[2][i]) begin
+              if (instr_data_out[i].ex == ariane_pkg::FE_INSTR_ACCESS_FAULT) begin
+                fetch_entry_o[NID+1].ex.cause = riscv::INSTR_ACCESS_FAULT;
+              end else begin
+                fetch_entry_o[NID+1].ex.cause = riscv::INSTR_PAGE_FAULT;
+              end
+              fetch_entry_o[NID+1].instruction = instr_data_out[i].instr;
+              fetch_entry_o[NID+1].ex.valid = instr_data_out[i].ex != ariane_pkg::FE_NONE;
+              fetch_entry_o[NID+1].ex.tval = {{64 - CVA6Cfg.VLEN{1'b0}}, instr_data_out[i].ex_vaddr};
+              fetch_entry_o[NID+1].branch_predict.cf = instr_data_out[i].cf;
+              // Cannot output two CF the same cycle.
+              pop_instr[i] = fetch_entry_fire[NID+1];
+            end
+          end
         end
       end
       // rotate the pointer left
       if (fetch_entry_fire[0]) begin
         if (CVA6Cfg.SuperscalarEn) begin
           idx_ds_d = fetch_entry_fire[NID] ? idx_ds[2] : idx_ds[1];
+          if (CVA6Cfg.FusionEn && fetch_entry_fire[NID+1]) begin
+            idx_ds_d = idx_ds[3];
+          end
         end else begin
           idx_ds_d = idx_ds[1];
         end
@@ -418,7 +442,7 @@ module instr_queue
     end
   end
 
-  for (genvar i = 0; i < CVA6Cfg.NrIssuePorts; i++) begin
+  for (genvar i = 0; i < CVA6Cfg.NrIssuePorts+CVA6Cfg.FusionEn; i++) begin
     assign fetch_entry_is_cf[i] = fetch_entry_o[i].branch_predict.cf != ariane_pkg::NoCF;
     assign fetch_entry_fire[i]  = fetch_entry_valid_o[i] & fetch_entry_ready_i[i];
   end
@@ -429,7 +453,7 @@ module instr_queue
   // Calculate (Next) PC
   // ----------------------
   assign pc_j[0] = pc_q;
-  for (genvar i = 0; i < CVA6Cfg.NrIssuePorts; i++) begin
+  for (genvar i = 0; i < CVA6Cfg.NrIssuePorts + CVA6Cfg.FusionEn; i++) begin
     assign pc_j[i+1] = fetch_entry_is_cf[i] ? address_out : (
       pc_j[i] + ((fetch_entry_o[i].instruction[1:0] != 2'b11) ? 'd2 : 'd4)
     );
@@ -444,6 +468,11 @@ module instr_queue
       if (CVA6Cfg.SuperscalarEn) begin
         if (fetch_entry_fire[NID]) begin
           pc_d = pc_j[2];
+          if (CVA6Cfg.FusionEn) begin
+            if (fetch_entry_fire[NID+1]) begin
+              pc_d = pc_j[3];
+            end
+          end
         end
       end
     end
