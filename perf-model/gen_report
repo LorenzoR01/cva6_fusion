@@ -1,0 +1,51 @@
+python model.py trace_rvfi_hart_00_aha-mont64.dasm
+python cycle_count.py trace_rvfi_hart_00_aha-mont64.dasm
+
+python model.py trace_rvfi_hart_00_crc32.dasm
+python cycle_count.py trace_rvfi_hart_00_crc32.dasm
+
+python model.py trace_rvfi_hart_00_edn.dasm
+python cycle_count.py trace_rvfi_hart_00_edn.dasm
+
+python model.py trace_rvfi_hart_00_huffbench.dasm
+python cycle_count.py trace_rvfi_hart_00_huffbench.dasm
+
+python model.py trace_rvfi_hart_00_matmult-int.dasm
+python cycle_count.py trace_rvfi_hart_00_matmult-int.dasm
+
+python model.py trace_rvfi_hart_00_md5sum.dasm
+python cycle_count.py trace_rvfi_hart_00_md5sum.dasm
+
+python model.py trace_rvfi_hart_00_nettle-aes.dasm
+python cycle_count.py trace_rvfi_hart_00_nettle-aes.dasm
+
+python model.py trace_rvfi_hart_00_nettle-sha256.dasm
+python cycle_count.py trace_rvfi_hart_00_nettle-sha256.dasm
+
+python model.py trace_rvfi_hart_00_nsichneu.dasm
+python cycle_count.py trace_rvfi_hart_00_nsichneu.dasm
+
+python model.py trace_rvfi_hart_00_picojpeg.dasm
+python cycle_count.py trace_rvfi_hart_00_picojpeg.dasm
+
+python model.py trace_rvfi_hart_00_primecount.dasm
+python cycle_count.py trace_rvfi_hart_00_primecount.dasm
+
+python model.py trace_rvfi_hart_00_qrduino.dasm
+python cycle_count.py trace_rvfi_hart_00_qrduino.dasm
+
+python model.py trace_rvfi_hart_00_sglib-combined.dasm
+python cycle_count.py trace_rvfi_hart_00_sglib-combined.dasm
+
+python model.py trace_rvfi_hart_00_slre.dasm
+python cycle_count.py trace_rvfi_hart_00_slre.dasm
+
+python model.py trace_rvfi_hart_00_tarfind.dasm
+python cycle_count.py trace_rvfi_hart_00_tarfind.dasm
+
+python model.py trace_rvfi_hart_00_ud.dasm
+python cycle_count.py trace_rvfi_hart_00_ud.dasm
+
+python model.py trace_rvfi_hart_00_wikisort.dasm
+python cycle_count.py trace_rvfi_hart_00_wikisort.dasm
+
