@@ -174,6 +174,7 @@ module decoder
     instruction_o.rs1                      = '0;
     instruction_o.rs2                      = '0;
     instruction_o.rd                       = '0;
+    instruction_o.result                   = '0;
     instruction_o.use_pc                   = 1'b0;
     instruction_o.is_compressed            = is_compressed_i;
     instruction_o.is_macro_instr           = is_macro_instr_i;
@@ -1216,7 +1217,7 @@ module decoder
             3'b001: instruction_o.op = ariane_pkg::SH;
             3'b010: instruction_o.op = ariane_pkg::SW;
             3'b011:
-            if (CVA6Cfg.XLEN == 64) instruction_o.op = ariane_pkg::SD;
+            if (CVA6Cfg.XLEN == 64 || CVA6Cfg.RVZilsd) instruction_o.op = ariane_pkg::SD;
             else illegal_instr = 1'b1;
             default: illegal_instr = 1'b1;
           endcase
@@ -1242,7 +1243,7 @@ module decoder
             if (CVA6Cfg.XLEN == 64) instruction_o.op = ariane_pkg::LWU;
             else illegal_instr = 1'b1;
             3'b011:
-            if (CVA6Cfg.XLEN == 64) instruction_o.op = ariane_pkg::LD;
+            if (CVA6Cfg.XLEN == 64 || CVA6Cfg.RVZilsd) instruction_o.op = ariane_pkg::LD;
             else illegal_instr = 1'b1;
             default: illegal_instr = 1'b1;
           endcase
@@ -1713,40 +1714,44 @@ module decoder
         instruction_o.use_imm = 1'b1;
       end
       SIMM: begin
-        instruction_o.result  = imm_s_type;
+        if (CVA6Cfg.RVZilsd && instruction_o.op == ariane_pkg::SD) begin
+          instruction_o.result = {imm_s_type,{32 - 5{1'b0}},instruction_o.rs2[REG_ADDR_SIZE-1:1],1'b1};
+        end else begin
+          instruction_o.result[CVA6Cfg.XLEN-1:0] = imm_s_type;
+        end
         instruction_o.use_imm = 1'b1;
       end
       SBIMM: begin
-        instruction_o.result  = imm_sb_type;
+        instruction_o.result[CVA6Cfg.XLEN-1:0]  = imm_sb_type;
         instruction_o.use_imm = 1'b1;
       end
       UIMM: begin
-        instruction_o.result  = imm_u_type;
+        instruction_o.result[CVA6Cfg.XLEN-1:0]  = imm_u_type;
         instruction_o.use_imm = 1'b1;
       end
       JIMM: begin
-        instruction_o.result  = imm_uj_type;
+        instruction_o.result[CVA6Cfg.XLEN-1:0]  = imm_uj_type;
         instruction_o.use_imm = 1'b1;
       end
       RS3: begin
         // result holds address of fp operand rs3
-        instruction_o.result  = {{CVA6Cfg.XLEN - 5{1'b0}}, instr.r4type.rs3};
+        instruction_o.result[CVA6Cfg.XLEN-1:0]  = {{CVA6Cfg.XLEN - 5{1'b0}}, instr.r4type.rs3};
         instruction_o.use_imm = 1'b0;
       end
       MUX_RD_RS3: begin
         // result holds address of operand rs3 which is in rd field
-        instruction_o.result  = {{CVA6Cfg.XLEN - 5{1'b0}}, instr.rtype.rd};
+        instruction_o.result[CVA6Cfg.XLEN-1:0]  = {{CVA6Cfg.XLEN - 5{1'b0}}, instr.rtype.rd};
         instruction_o.use_imm = 1'b0;
       end
       default: begin
-        instruction_o.result  = {CVA6Cfg.XLEN{1'b0}};
+        instruction_o.result[CVA6Cfg.XLEN-1:0]  = {CVA6Cfg.XLEN{1'b0}};
         instruction_o.use_imm = 1'b0;
       end
     endcase
 
     if (CVA6Cfg.EnableAccelerator) begin
       if (is_accel) begin
-        instruction_o.result  = acc_instruction.result;
+        instruction_o.result[CVA6Cfg.XLEN-1:0]  = acc_instruction.result;
         instruction_o.use_imm = acc_instruction.use_imm;
       end
     end

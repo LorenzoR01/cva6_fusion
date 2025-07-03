@@ -51,7 +51,7 @@ module store_unit
     // Transaction ID - ISSUE_STAGE
     output logic [CVA6Cfg.TRANS_ID_BITS-1:0] trans_id_o,
     // Store result - ISSUE_STAGE
-    output logic [CVA6Cfg.XLEN-1:0] result_o,
+    output logic [CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] result_o,
     // Store exception output - TO_BE_COMPLETED
     output exception_t ex_o,
     // Address translation request - TO_BE_COMPLETED
@@ -87,20 +87,20 @@ module store_unit
 );
 
   // align data to address e.g.: shift data to be naturally 64
-  function automatic [CVA6Cfg.XLEN-1:0] data_align(logic [2:0] addr, logic [63:0] data);
+  function automatic [CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] data_align(logic [2:0] addr, logic [63:0] data);
     // Set addr[2] to 1'b0 when 32bits
-    logic [ 2:0] addr_tmp = {(addr[2] && CVA6Cfg.IS_XLEN64), addr[1:0]};
+    logic [ 2:0] addr_tmp = {(addr[2] && (CVA6Cfg.IS_XLEN64 || CVA6Cfg.RVZilsd)), addr[1:0]};
     logic [63:0] data_tmp = {64{1'b0}};
     case (addr_tmp)
-      3'b000: data_tmp[CVA6Cfg.XLEN-1:0] = {data[CVA6Cfg.XLEN-1:0]};
+      3'b000: data_tmp[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] = {data[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0]};
       3'b001:
-      data_tmp[CVA6Cfg.XLEN-1:0] = {data[CVA6Cfg.XLEN-9:0], data[CVA6Cfg.XLEN-1:CVA6Cfg.XLEN-8]};
+      data_tmp[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] = {data[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-9:0], data[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-8]};
       3'b010:
-      data_tmp[CVA6Cfg.XLEN-1:0] = {data[CVA6Cfg.XLEN-17:0], data[CVA6Cfg.XLEN-1:CVA6Cfg.XLEN-16]};
+      data_tmp[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] = {data[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-17:0], data[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-16]};
       3'b011:
-      data_tmp[CVA6Cfg.XLEN-1:0] = {data[CVA6Cfg.XLEN-25:0], data[CVA6Cfg.XLEN-1:CVA6Cfg.XLEN-24]};
+      data_tmp[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] = {data[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-25:0], data[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-24]};
       default:
-      if (CVA6Cfg.IS_XLEN64) begin
+      if (CVA6Cfg.IS_XLEN64 || CVA6Cfg.RVZilsd) begin
         case (addr_tmp)
           3'b100:  data_tmp = {data[31:0], data[63:32]};
           3'b101:  data_tmp = {data[23:0], data[63:24]};
@@ -110,7 +110,7 @@ module store_unit
         endcase
       end
     endcase
-    return data_tmp[CVA6Cfg.XLEN-1:0];
+    return data_tmp[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0];
   endfunction
 
   // it doesn't matter what we are writing back as stores don't return anything
@@ -131,8 +131,8 @@ module store_unit
   logic instr_is_amo;
   assign instr_is_amo = is_amo(lsu_ctrl_i.operation);
   // keep the data and the byte enable for the second cycle (after address translation)
-  logic [CVA6Cfg.XLEN-1:0] st_data_n, st_data_q;
-  logic [(CVA6Cfg.XLEN/8)-1:0] st_be_n, st_be_q;
+  logic [CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] st_data_n, st_data_q;
+  logic [((CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd)/8)-1:0] st_be_n, st_be_q;
   logic [1:0] st_data_size_n, st_data_size_q;
   amo_t amo_op_d, amo_op_q;
 
@@ -251,8 +251,8 @@ module store_unit
   always_comb begin
     st_be_n = lsu_ctrl_i.be;
     // don't shift the data if we are going to perform an AMO as we still need to operate on this data
-    st_data_n = (CVA6Cfg.RVA && instr_is_amo) ? lsu_ctrl_i.data[CVA6Cfg.XLEN-1:0] :
-        data_align(lsu_ctrl_i.vaddr[2:0], {{64 - CVA6Cfg.XLEN{1'b0}}, lsu_ctrl_i.data});
+    st_data_n = (CVA6Cfg.RVA && instr_is_amo) ? lsu_ctrl_i.data[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] :
+        data_align(lsu_ctrl_i.vaddr[2:0], {{64 - (CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd){1'b0}}, lsu_ctrl_i.data});
     st_data_size_n = extract_transfer_size(lsu_ctrl_i.operation);
     // save AMO op for next cycle
     if (CVA6Cfg.RVA) begin

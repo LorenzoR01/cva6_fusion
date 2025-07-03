@@ -37,7 +37,7 @@ package build_config_pkg;
     cfg.GPLEN = (CVA6Cfg.XLEN == 32) ? 34 : 41;
     cfg.IS_XLEN32 = IS_XLEN32;
     cfg.IS_XLEN64 = IS_XLEN64;
-    cfg.XLEN_ALIGN_BYTES = $clog2(CVA6Cfg.XLEN / 8);
+    cfg.XLEN_ALIGN_BYTES = $clog2((CVA6Cfg.XLEN+CVA6Cfg.RVZilsd*32) / 8);
     cfg.ASID_WIDTH = (CVA6Cfg.XLEN == 64) ? 16 : 1;
     cfg.VMID_WIDTH = (CVA6Cfg.XLEN == 64) ? 14 : 1;
 
@@ -78,6 +78,7 @@ package build_config_pkg;
     cfg.RVZiCond = CVA6Cfg.RVZiCond;
     cfg.RVZicntr = CVA6Cfg.RVZicntr;
     cfg.RVZihpm = CVA6Cfg.RVZihpm;
+    cfg.RVZilsd = CVA6Cfg.RVZilsd;
     cfg.NR_SB_ENTRIES = CVA6Cfg.NrScoreboardEntries;
     cfg.TRANS_ID_BITS = $clog2(CVA6Cfg.NrScoreboardEntries);
 
@@ -89,7 +90,7 @@ package build_config_pkg;
     cfg.XF16ALTVec = bit'(XF16ALTVec);
     cfg.XF8Vec = bit'(XF8Vec);
     // Can take 2 or 3 in single issue. 4 or 6 in dual issue.
-    cfg.NrRgprPorts = unsigned'(CVA6Cfg.SuperscalarEn ? 4 : 2);
+    cfg.NrRgprPorts = unsigned'(CVA6Cfg.SuperscalarEn ? 4+2*CVA6Cfg.RVZilsd : 2+CVA6Cfg.RVZilsd);
     // cfg.NrRgprPorts = unsigned'(CVA6Cfg.SuperscalarEn ? 6 : 3);
     cfg.NrWbPorts = unsigned'(NrWbPorts);
     cfg.EnableAccelerator = bit'(EnableAccelerator);

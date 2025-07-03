@@ -44,7 +44,7 @@ module load_unit
     // Load transaction ID - ISSUE_STAGE
     output logic [CVA6Cfg.TRANS_ID_BITS-1:0] trans_id_o,
     // Load result - ISSUE_STAGE
-    output logic [CVA6Cfg.XLEN-1:0] result_o,
+    output logic [CVA6Cfg.XLEN+CVA6Cfg.RVZilsd*32-1:0] result_o,
     // Load exception - ISSUE_STAGE
     output exception_t ex_o,
     // Request address translation - MMU
@@ -466,7 +466,7 @@ module load_unit
   // ---------------
   // Sign Extend
   // ---------------
-  logic [CVA6Cfg.XLEN-1:0] shifted_data;
+  logic [CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] shifted_data;
 
   // realign as needed
   assign shifted_data = req_port_i.data_rdata >> {ldbuf_rdata.address_offset, 3'b000};
@@ -486,7 +486,7 @@ module load_unit
     end  */
 
   // result mux fast
-  logic [        (CVA6Cfg.XLEN/8)-1:0] rdata_sign_bits;
+  logic [((CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd)/8)-1:0] rdata_sign_bits;
   logic [CVA6Cfg.XLEN_ALIGN_BYTES-1:0] rdata_offset;
   logic rdata_sign_bit, rdata_is_signed, rdata_is_fp_signed;
 
@@ -494,11 +494,11 @@ module load_unit
   // prepare these signals for faster selection in the next cycle
   assign rdata_is_signed    =   ldbuf_rdata.operation inside {ariane_pkg::LW,  ariane_pkg::LH,  ariane_pkg::LB, ariane_pkg::HLV_W, ariane_pkg::HLV_H, ariane_pkg::HLV_B};
   assign rdata_is_fp_signed =   ldbuf_rdata.operation inside {ariane_pkg::FLW, ariane_pkg::FLH, ariane_pkg::FLB};
-  assign rdata_offset       = ((ldbuf_rdata.operation inside {ariane_pkg::LW,  ariane_pkg::FLW, ariane_pkg::HLV_W}) & CVA6Cfg.IS_XLEN64) ? ldbuf_rdata.address_offset + 3 :
+  assign rdata_offset       = ((ldbuf_rdata.operation inside {ariane_pkg::LW,  ariane_pkg::FLW, ariane_pkg::HLV_W}) & (CVA6Cfg.IS_XLEN64 | CVA6Cfg.RVZilsd)) ? ldbuf_rdata.address_offset + 3 :
                                 ( ldbuf_rdata.operation inside {ariane_pkg::LH,  ariane_pkg::FLH, ariane_pkg::HLV_H})                     ? ldbuf_rdata.address_offset + 1 :
                                                                                                                          ldbuf_rdata.address_offset;
 
-  for (genvar i = 0; i < (CVA6Cfg.XLEN / 8); i++) begin : gen_sign_bits
+  for (genvar i = 0; i < ((CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd) / 8); i++) begin : gen_sign_bits
     assign rdata_sign_bits[i] = req_port_i.data_rdata[(i+1)*8-1];
   end
 
@@ -511,30 +511,30 @@ module load_unit
   always_comb begin
     unique case (ldbuf_rdata.operation)
       ariane_pkg::LW, ariane_pkg::LWU, ariane_pkg::HLV_W, ariane_pkg::HLV_WU, ariane_pkg::HLVX_WU:
-      result_o = {{CVA6Cfg.XLEN - 32{rdata_sign_bit}}, shifted_data[31:0]};
+      result_o = {{(CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd) - 32{rdata_sign_bit}}, shifted_data[31:0]};
       ariane_pkg::LH, ariane_pkg::LHU, ariane_pkg::HLV_H, ariane_pkg::HLV_HU, ariane_pkg::HLVX_HU:
-      result_o = {{CVA6Cfg.XLEN - 32 + 16{rdata_sign_bit}}, shifted_data[15:0]};
+      result_o = {{(CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd) - 32 + 16{rdata_sign_bit}}, shifted_data[15:0]};
       ariane_pkg::LB, ariane_pkg::LBU, ariane_pkg::HLV_B, ariane_pkg::HLV_BU:
-      result_o = {{CVA6Cfg.XLEN - 32 + 24{rdata_sign_bit}}, shifted_data[7:0]};
+      result_o = {{(CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd) - 32 + 24{rdata_sign_bit}}, shifted_data[7:0]};
       default: begin
         // FLW, FLH and FLB have been defined here in default case to improve Code Coverage
         if (CVA6Cfg.FpPresent) begin
           unique case (ldbuf_rdata.operation)
             ariane_pkg::FLW: begin
-              result_o = {{CVA6Cfg.XLEN - 32{rdata_sign_bit}}, shifted_data[31:0]};
+              result_o = {{(CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd) - 32{rdata_sign_bit}}, shifted_data[31:0]};
             end
             ariane_pkg::FLH: begin
-              result_o = {{CVA6Cfg.XLEN - 32 + 16{rdata_sign_bit}}, shifted_data[15:0]};
+              result_o = {{(CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd) - 32 + 16{rdata_sign_bit}}, shifted_data[15:0]};
             end
             ariane_pkg::FLB: begin
-              result_o = {{CVA6Cfg.XLEN - 32 + 24{rdata_sign_bit}}, shifted_data[7:0]};
+              result_o = {{(CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd) - 32 + 24{rdata_sign_bit}}, shifted_data[7:0]};
             end
             default: begin
-              result_o = shifted_data[CVA6Cfg.XLEN-1:0];
+              result_o = shifted_data[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0];
             end
           endcase
         end else begin
-          result_o = shifted_data[CVA6Cfg.XLEN-1:0];
+          result_o = shifted_data[CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0];
         end
       end
     endcase

@@ -116,11 +116,11 @@ module issue_read_operands
     output logic x_issue_writeback_o,
     output logic [CVA6Cfg.TRANS_ID_BITS-1:0] x_id_o,
     // Destination register in the register file - COMMIT_STAGE
-    input logic [CVA6Cfg.NrCommitPorts-1:0][4:0] waddr_i,
+    input logic [CVA6Cfg.NrCommitPorts+CVA6Cfg.RVZilsd-1:0][4:0] waddr_i,
     // Value to write to register file - COMMIT_STAGE
-    input logic [CVA6Cfg.NrCommitPorts-1:0][CVA6Cfg.XLEN-1:0] wdata_i,
+    input logic [CVA6Cfg.NrCommitPorts+CVA6Cfg.RVZilsd-1:0][CVA6Cfg.XLEN-1:0] wdata_i,
     // GPR write enable - COMMIT_STAGE
-    input logic [CVA6Cfg.NrCommitPorts-1:0] we_gpr_i,
+    input logic [CVA6Cfg.NrCommitPorts+CVA6Cfg.RVZilsd-1:0] we_gpr_i,
     // FPR write enable - COMMIT_STAGE
     input logic [CVA6Cfg.NrCommitPorts-1:0] we_fpr_i,
     // Issue stall - PERF_COUNTERS
@@ -484,7 +484,7 @@ module issue_read_operands
         .idx_o(idx_hzd_rs3[i]),
         .valid_o(rs3_raw_check[i])
     );
-    assign rs3_has_raw[i] = rs3_raw_check[i] && rs3_fpr[i];
+    assign rs3_has_raw[i] = rs3_raw_check[i] && (rs3_fpr[i] || (CVA6Cfg.RVZilsd && issue_instr_i[i].op == ariane_pkg::SD));
   end
 
   // ----------------------------------
@@ -556,7 +556,7 @@ module issue_read_operands
         end
       end
 
-      if (rs3_has_raw[i] && rs3_fpr[i]) begin
+      if (rs3_has_raw[i] && (rs3_fpr[i] || (CVA6Cfg.RVZilsd && issue_instr_i[i].op == ariane_pkg::SD))) begin
         if (rs3_valid[i]) begin
           forward_rs3[i] = 1'b1;
         end else begin  // the operand is not available -> stall
@@ -639,6 +639,10 @@ module issue_read_operands
         fu_data_n[i].imm = (CVA6Cfg.FpPresent && is_imm_fpr(issue_instr_i[i].op)) ?
             {{CVA6Cfg.XLEN - CVA6Cfg.FLen{1'b0}}, operand_c_regfile[i]} : issue_instr_i[i].result;
       end
+      if (CVA6Cfg.RVZilsd && issue_instr_i[i].op == ariane_pkg::SD) begin
+        fu_data_n[i].operand_c = operand_c_regfile[i];
+        fu_data_n[i].imm = issue_instr_i[i].result[63:32];
+      end
       fu_data_n[i].trans_id  = issue_instr_i[i].trans_id;
       fu_data_n[i].fu        = issue_instr_i[i].fu;
       fu_data_n[i].operation = issue_instr_i[i].op;
@@ -656,6 +660,8 @@ module issue_read_operands
       if ((CVA6Cfg.FpPresent || (CVA6Cfg.CvxifEn && OPERANDS_PER_INSTR == 3)) && forward_rs3[i]) begin
         fu_data_n[i].imm = imm_forward_rs3;
       end
+      if (CVA6Cfg.RVZilsd && forward_rs3[i]) begin
+        fu_data_n[i].operand_c = imm_forward_rs3;
 
       // use the PC as operand a
       if (issue_instr_i[i].use_pc) begin
@@ -839,9 +845,9 @@ module issue_read_operands
   logic [  CVA6Cfg.NrRgprPorts-1:0][             4:0] raddr_pack;
 
   // pack signals
-  logic [CVA6Cfg.NrCommitPorts-1:0][             4:0] waddr_pack;
-  logic [CVA6Cfg.NrCommitPorts-1:0][CVA6Cfg.XLEN-1:0] wdata_pack;
-  logic [CVA6Cfg.NrCommitPorts-1:0]                   we_pack;
+  logic [CVA6Cfg.NrCommitPorts+CVA6Cfg.RVZilsd-1:0][             4:0] waddr_pack;
+  logic [CVA6Cfg.NrCommitPorts+CVA6Cfg.RVZilsd-1:0][CVA6Cfg.XLEN-1:0] wdata_pack;
+  logic [CVA6Cfg.NrCommitPorts+CVA6Cfg.RVZilsd-1:0]                   we_pack;
 
   //adjust address to read from register file (when synchronous RAM is used reads take one cycle, so we advance the address)   
   for (genvar i = 0; i <= CVA6Cfg.NrIssuePorts - 1; i++) begin
@@ -852,7 +858,7 @@ module issue_read_operands
     end
   end
 
-  for (genvar i = 0; i < CVA6Cfg.NrCommitPorts; i++) begin : gen_write_back_port
+  for (genvar i = 0; i < CVA6Cfg.NrCommitPorts+CVA6Cfg.RVZilsd; i++) begin : gen_write_back_port
     assign waddr_pack[i] = waddr_i[i];
     assign wdata_pack[i] = wdata_i[i];
     assign we_pack[i]    = we_gpr_i[i];

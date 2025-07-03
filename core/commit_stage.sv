@@ -43,11 +43,11 @@ module commit_stage
     // Acknowledge that we are indeed committing - CSR_REGFILE
     output logic [CVA6Cfg.NrCommitPorts-1:0] commit_macro_ack_o,
     // Register file write address - ISSUE_STAGE
-    output logic [CVA6Cfg.NrCommitPorts-1:0][4:0] waddr_o,
+    output logic [CVA6Cfg.NrCommitPorts+CVA6Cfg.RVZilsd-1:0][4:0] waddr_o,
     // Register file write data - ISSUE_STAGE
-    output logic [CVA6Cfg.NrCommitPorts-1:0][CVA6Cfg.XLEN-1:0] wdata_o,
+    output logic [CVA6Cfg.NrCommitPorts+CVA6Cfg.RVZilsd-1:0][CVA6Cfg.XLEN-1:0] wdata_o,
     // Register file write enable - ISSUE_STAGE
-    output logic [CVA6Cfg.NrCommitPorts-1:0] we_gpr_o,
+    output logic [CVA6Cfg.NrCommitPorts+CVA6Cfg:RVZilsd-1:0] we_gpr_o,
     // Floating point register enable - ISSUE_STAGE
     output logic [CVA6Cfg.NrCommitPorts-1:0] we_fpr_o,
     // Result of AMO operation - CACHE
@@ -143,7 +143,7 @@ module commit_stage
     commit_lsu_o = 1'b0;
     commit_csr_o = 1'b0;
     // amos will commit on port 0
-    wdata_o[0] = (CVA6Cfg.RVA && amo_resp_i.ack) ? amo_resp_i.result[CVA6Cfg.XLEN-1:0] : commit_instr_i[0].result;
+    wdata_o[0] = (CVA6Cfg.RVA && amo_resp_i.ack) ? amo_resp_i.result[CVA6Cfg.XLEN-1:0] : commit_instr_i[0].result[CVA6Cfg.XLEN-1:0];
     csr_op_o = ADD;  // this corresponds to a CSR NOP
     csr_wdata_o = {CVA6Cfg.XLEN{1'b0}};
     fence_i_o = 1'b0;
@@ -189,6 +189,22 @@ module commit_stage
             commit_ack_o[0] = 1'b0;
           end
         end
+        if (CVA6Cfg.RVZilsd) begin
+          if (commit_instr_i[0].op == ariane_pkg::LD && commit_ack_o[0]) begin
+            wdata_o[2] = commit_instr_i[0].result[63:32]; 
+            waddr_o[2] = {commit_instr_i[0].rd[REG_ADDR_SIZE-1:1],1'b1};
+            if (!commit_drop_i[0]) begin
+              we_gpr_o[2] = 1'b1;
+            end else begin
+              we_gpr_o[2] = 1'b0;
+            end
+          end else begin
+            wdata_o[2] = '0;
+            waddr_o[2] = '0;
+            we_gpr_o[2] = 1'b0;
+          end
+        end
+
         // ---------
         // FPU Flags
         // ---------
@@ -306,7 +322,7 @@ module commit_stage
       commit_macro_ack[1] = 1'b0;
       commit_ack_o[1]     = 1'b0;
       we_gpr_o[1]         = 1'b0;
-      wdata_o[1]          = commit_instr_i[1].result;
+      wdata_o[1]          = commit_instr_i[1].result[CVA6Cfg.XLEN-1:0];
 
       // -----------------
       // Commit Port 2
@@ -333,6 +349,29 @@ module commit_stage
             if (CVA6Cfg.FpPresent && ariane_pkg::is_rd_fpr(commit_instr_i[1].op))
               we_fpr_o[1] = 1'b1;
             else we_gpr_o[1] = 1'b1;
+
+          if (CVA6Cfg.RVZilsd) begin
+            if (commit_instr_i[1].op == ariane_pkg::LD && commit_ack_o[1]) begin
+              if (commit_instr_i[0].op == ariane_pkg::LD && !commit_drop_i[1]) begin
+                commit_ack_o[1] = 1'b0;
+                wdata_o[2] = '0;
+                waddr_o[2] = '0;
+                we_gpr_o[2:1] = 2'b00;
+              end else begin
+                wdata_o[2] = commit_instr_i[1].result[63:32]; 
+                waddr_o[2] = {commit_instr_i[1].rd[REG_ADDR_SIZE-1:1],1'b1};
+                if (!commit_drop_i[1]) begin
+                  we_gpr_o[2] = 1'b1;
+                end else begin
+                  we_gpr_o[2] = 1'b0;
+                end
+              end
+            end else begin
+              wdata_o[2] = '0;
+              waddr_o[2] = '0;
+              we_gpr_o[2] = 1'b0;
+            end
+          end
 
             // additionally check if we are retiring an FPU instruction because we need to make sure that we write all
             // exception flags

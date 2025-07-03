@@ -74,7 +74,7 @@ module scoreboard #(
     // Transaction ID at which to write the result back - EX_STAGE
     input logic [CVA6Cfg.NrWbPorts-1:0][CVA6Cfg.TRANS_ID_BITS-1:0] trans_id_i,
     // Results to write back - EX_STAGE
-    input logic [CVA6Cfg.NrWbPorts-1:0][CVA6Cfg.XLEN-1:0] wbdata_i,
+    input logic [CVA6Cfg.NrWbPorts-1:0][CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] wbdata_i,
     // Exception from a functional unit (e.g.: ld/st exception) - EX_STAGE
     input exception_t [CVA6Cfg.NrWbPorts-1:0] ex_i,
     // Indicates valid results - EX_STAGE

@@ -53,7 +53,7 @@ module load_store_unit
     // Load transaction ID - ISSUE_STAGE
     output logic [CVA6Cfg.TRANS_ID_BITS-1:0] load_trans_id_o,
     // Load result - ISSUE_STAGE
-    output logic [CVA6Cfg.XLEN-1:0] load_result_o,
+    output logic [CVA6Cfg.XLEN+CVA6Cfg.RVZilsd*32-1:0] load_result_o,
     // Load result is valid - ISSUE_STAGE
     output logic load_valid_o,
     // Load exception - ISSUE_STAGE
@@ -62,7 +62,7 @@ module load_store_unit
     // Store transaction ID - ISSUE_STAGE
     output logic [CVA6Cfg.TRANS_ID_BITS-1:0] store_trans_id_o,
     // Store result - ISSUE_STAGE
-    output logic [CVA6Cfg.XLEN-1:0] store_result_o,
+    output logic [CVA6Cfg.XLEN+CVA6Cfg.RVZilsd*32-1:0] store_result_o,
     // Store result is valid - ISSUE_STAGE
     output logic store_valid_o,
     // Store exception - ISSUE_STAGE
@@ -184,7 +184,7 @@ module load_store_unit
   logic [    CVA6Cfg.XLEN-1:0] vaddr_xlen;
   logic                        overflow;
   logic                        g_overflow;
-  logic [(CVA6Cfg.XLEN/8)-1:0] be_i;
+  logic [((CVA6Cfg.XLEN+CVA6Cfg.RVZilsd*32)/8)-1:0] be_i;
 
   assign vaddr_xlen = $unsigned($signed(fu_data_i.imm) + $signed(fu_data_i.operand_a));
   assign vaddr_i = vaddr_xlen[CVA6Cfg.VLEN-1:0];
@@ -689,7 +689,7 @@ module load_store_unit
   // 12 bit are the same anyway
   // and we can always generate the byte enable from the address at hand
 
-  if (CVA6Cfg.IS_XLEN64) begin : gen_8b_be
+  if (CVA6Cfg.IS_XLEN64 || CVA6Cfg.RVZilsd) begin : gen_8b_be
     assign be_i = be_gen(vaddr_i[2:0], extract_transfer_size(fu_data_i.operation));
   end else begin : gen_4b_be
     assign be_i = be_gen_32(vaddr_i[1:0], extract_transfer_size(fu_data_i.operation));
@@ -708,7 +708,7 @@ module load_store_unit
     data_misaligned = 1'b0;
 
     if (lsu_ctrl.valid) begin
-      if (CVA6Cfg.IS_XLEN64) begin
+      if (CVA6Cfg.IS_XLEN64 || CVA6Cfg.RVZilsd) begin
         case (lsu_ctrl.operation)
           // double word
           LD, SD, FLD, FSD,
@@ -848,7 +848,7 @@ module load_store_unit
     hlvx_inst,
     overflow,
     g_overflow,
-    fu_data_i.operand_b,
+    {fu_data_i.operand_c,fu_data_i.operand_b},
     be_i,
     fu_data_i.fu,
     fu_data_i.operation,

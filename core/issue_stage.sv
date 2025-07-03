@@ -133,7 +133,7 @@ module issue_stage
     // Result from branch unit - EX_STAGE
     input bp_resolve_t resolved_branch_i,
     // Results to write back - EX_STAGE
-    input logic [CVA6Cfg.NrWbPorts-1:0][CVA6Cfg.XLEN-1:0] wbdata_i,
+    input logic [CVA6Cfg.NrWbPorts-1:0][CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] wbdata_i,
     // exception from execute stage or CVXIF - EX_STAGE
     input exception_t [CVA6Cfg.NrWbPorts-1:0] ex_ex_i,
     // Indicates valid results - EX_STAGE

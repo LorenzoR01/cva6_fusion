@@ -102,7 +102,7 @@ module cva6
       logic [REG_ADDR_SIZE-1:0] rs1;  // register source address 1
       logic [REG_ADDR_SIZE-1:0] rs2;  // register source address 2
       logic [REG_ADDR_SIZE-1:0] rd;  // register destination address
-      logic [CVA6Cfg.XLEN-1:0] result;  // for unfinished instructions this field also holds the immediate,
+      logic [CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] result;  // for unfinished instructions this field also holds the immediate,
       // for unfinished floating-point that are partly encoded in rs2, this field also holds rs2
       // for unfinished floating-point fused operations (FMADD, FMSUB, FNMADD, FNMSUB)
       // this field holds the address of the third operand from the floating-point register file
@@ -159,8 +159,8 @@ module cva6
       logic                             hlvx_inst;
       logic                             overflow;
       logic                             g_overflow;
-      logic [CVA6Cfg.XLEN-1:0]          data;
-      logic [(CVA6Cfg.XLEN/8)-1:0]      be;
+      logic [CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0]          data;
+      logic [((CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd)/8)-1:0]      be;
       fu_t                              fu;
       fu_op                             operation;
       logic [CVA6Cfg.TRANS_ID_BITS-1:0] trans_id;
@@ -171,6 +171,7 @@ module cva6
       fu_op                             operation;
       logic [CVA6Cfg.XLEN-1:0]          operand_a;
       logic [CVA6Cfg.XLEN-1:0]          operand_b;
+      logic [CVA6Cfg.XLEN-1:0]          operand_c;
       logic [CVA6Cfg.XLEN-1:0]          imm;
       logic [CVA6Cfg.TRANS_ID_BITS-1:0] trans_id;
     },
@@ -198,11 +199,11 @@ module cva6
     localparam type dcache_req_i_t = struct packed {
       logic [CVA6Cfg.DCACHE_INDEX_WIDTH-1:0] address_index;
       logic [CVA6Cfg.DCACHE_TAG_WIDTH-1:0]   address_tag;
-      logic [CVA6Cfg.XLEN-1:0]               data_wdata;
+      logic [CVA6Cfg.XLEN+CVA6Cfg.RVZilsd*32-1:0]               data_wdata;
       logic [CVA6Cfg.DCACHE_USER_WIDTH-1:0]  data_wuser;
       logic                                  data_req;
       logic                                  data_we;
-      logic [(CVA6Cfg.XLEN/8)-1:0]           data_be;
+      logic [((CVA6Cfg.XLEN+CVA6Cfg.RVZilsd*32)/8)-1:0]           data_be;
       logic [1:0]                            data_size;
       logic [CVA6Cfg.DcacheIdWidth-1:0]      data_id;
       logic                                  kill_req;
@@ -213,7 +214,7 @@ module cva6
       logic                                 data_gnt;
       logic                                 data_rvalid;
       logic [CVA6Cfg.DcacheIdWidth-1:0]     data_rid;
-      logic [CVA6Cfg.XLEN-1:0]              data_rdata;
+      logic [CVA6Cfg.XLEN+CVA6Cfg.RVZilsd*32-1:0]              data_rdata;
       logic [CVA6Cfg.DCACHE_USER_WIDTH-1:0] data_ruser;
     },
 
@@ -757,12 +758,12 @@ module cva6
   );
 
   logic [CVA6Cfg.NrWbPorts-1:0][CVA6Cfg.TRANS_ID_BITS-1:0] trans_id_ex_id;
-  logic [CVA6Cfg.NrWbPorts-1:0][CVA6Cfg.XLEN-1:0] wbdata_ex_id;
+  logic [CVA6Cfg.NrWbPorts-1:0][CVA6Cfg.XLEN+32*CVA6Cfg.RVZilsd-1:0] wbdata_ex_id;
   exception_t [CVA6Cfg.NrWbPorts-1:0] ex_ex_ex_id;  // exception from execute, ex_stage to id_stage
   logic [CVA6Cfg.NrWbPorts-1:0] wt_valid_ex_id;
 
   assign trans_id_ex_id[FLU_WB] = flu_trans_id_ex_id;
-  assign wbdata_ex_id[FLU_WB]   = flu_result_ex_id;
+  assign wbdata_ex_id[FLU_WB]   = {CVA6Cfg.RVZilsd*32{1'b0},flu_result_ex_id};
   assign ex_ex_ex_id[FLU_WB]    = flu_exception_ex_id;
   assign wt_valid_ex_id[FLU_WB] = flu_valid_ex_id;
 
@@ -777,7 +778,7 @@ module cva6
   assign wt_valid_ex_id[LOAD_WB] = load_valid_ex_id;
 
   assign trans_id_ex_id[FPU_WB] = fpu_trans_id_ex_id;
-  assign wbdata_ex_id[FPU_WB]   = fpu_result_ex_id;
+  assign wbdata_ex_id[FPU_WB]   = {CVA6Cfg.RVZilsd*32{1'b0},fpu_result_ex_id};
   assign ex_ex_ex_id[FPU_WB]    = fpu_exception_ex_id;
   assign wt_valid_ex_id[FPU_WB] = fpu_valid_ex_id;
 
@@ -804,13 +805,13 @@ module cva6
       cvxif_req.result_ready     = x_result_ready;
     end
     assign trans_id_ex_id[X_WB] = x_trans_id_ex_id;
-    assign wbdata_ex_id[X_WB]   = x_result_ex_id;
+    assign wbdata_ex_id[X_WB]   = {CVA6Cfg.RVZilsd*32{1'b0},x_result_ex_id};
     assign ex_ex_ex_id[X_WB]    = x_exception_ex_id;
     assign wt_valid_ex_id[X_WB] = x_valid_ex_id;
   end else if (CVA6Cfg.EnableAccelerator) begin
     assign cvxif_req = '0;
     assign trans_id_ex_id[ACC_WB] = acc_trans_id_ex_id;
-    assign wbdata_ex_id[ACC_WB]   = acc_result_ex_id;
+    assign wbdata_ex_id[ACC_WB]   = {CVA6Cfg.RVZilsd*32{1'b0},acc_result_ex_id};
     assign ex_ex_ex_id[ACC_WB]    = acc_exception_ex_id;
     assign wt_valid_ex_id[ACC_WB] = acc_valid_ex_id;
   end else begin
